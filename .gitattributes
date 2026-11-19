@@ -1,0 +1,9 @@
+# Keep LF everywhere. Important: the SQL migrations embedded in
+# src-tauri/src/lib.rs are checksummed by sqlx — CRLF would change the
+# checksum and existing databases would refuse to open.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary

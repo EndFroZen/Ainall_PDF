@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+/* Class-based dark mode: <html class="dark"> (set by src/lib/theme.ts) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Ainall PDF brand tokens — use as bg-brand, text-brand-600, etc. */
+@theme {
+  --color-brand-50: #fef2f2;
+  --color-brand-100: #fde3e4;
+  --color-brand-200: #fbcbcd;
+  --color-brand-300: #f7a6a9;
+  --color-brand-400: #ef7277;
+  --color-brand-500: #e5474d;
+  --color-brand-600: #dc353a;
+  --color-brand-700: #b1242a;
+  --color-brand-800: #932126;
+  --color-brand-900: #7a2125;
+  --color-brand: #dc353a;
+
+  /* Landing artwork palette — light */
+  --color-maroon: #87162a;
+  --color-maroon-dark: #6b0f20;
+  --color-cream: #fff0d9;
+
+  /* Landing artwork palette — dark */
+  --color-night: #2a000a;
+  --color-night-800: #3a0812;
+  --color-coral: #e0705f;
+
+  /* Neutral surfaces for app chrome in dark mode */
+  --color-ink-950: #141012;
+  --color-ink-900: #1c1719;
+  --color-ink-800: #26201f;
+  --color-ink-700: #352d2c;
+
+  --animate-rise: rise 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-neutral-100 text-neutral-900 antialiased dark:bg-ink-950 dark:text-neutral-100;
+  font-family: Inter, "Noto Sans Thai", system-ui, "Segoe UI", sans-serif;
+}
