@@ -5,7 +5,7 @@ import Landing from "./pages/Landing";
 import Viewer from "./pages/Viewer";
 import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
-import Tools, { CompressPdf, MergePdf, SplitPdf, type Tool, type ToolProps } from "./pages/Tools";
+import Tools, { CompressPdf, SplitPdf, type Tool, type ToolProps } from "./pages/Tools";
 import OrganizePages from "./pages/OrganizePages";
 import ImagesToPdf from "./pages/ImagesToPdf";
 import PdfToImages from "./pages/PdfToImages";
@@ -33,7 +33,6 @@ type View =
   | { name: "tool"; tool: Tool };
 
 const TOOL_PAGES: Record<Tool, (p: ToolProps) => React.JSX.Element> = {
-  merge: MergePdf,
   split: SplitPdf,
   compress: CompressPdf,
   organize: OrganizePages,

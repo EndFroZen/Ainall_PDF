@@ -1,40 +1,34 @@
 import { useCallback, useState } from "react";
 import PageShell, { actionPrimary, actionSecondary } from "../components/PageShell";
-import { IconFile, IconTrash, IconUpload } from "../components/icons";
+import { IconFile } from "../components/icons";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   Choice,
   DropZone,
   Panel,
   errText,
-  iconBtn,
   inputCls,
-  moveItem,
   useFileDrop,
-  useReorder,
 } from "../components/ToolKit";
 import {
   compressPdf,
   countPages,
   exportPdf,
   fileName,
-  mergePdfs,
   pickFolder,
   pickPdfPath,
-  pickPdfPaths,
   splitPdf,
 } from "../lib/pdf";
 import { formatBytes } from "../lib/projects";
 import type { Level } from "../lib/compress";
 import { parseRanges } from "../lib/ranges";
 
-export type Tool = "merge" | "split" | "compress" | "images" | "toImages" | "organize" | "stamp";
+export type Tool = "split" | "compress" | "images" | "toImages" | "organize" | "stamp";
 
 const ACTIONS: { tool: Tool | "blank"; title: string; desc: string; icon: string }[] = [
-  { tool: "merge", title: "รวม PDF", desc: "นำหลายไฟล์มาต่อกันเป็นไฟล์เดียว", icon: "⧉" },
+  { tool: "organize", title: "รวม / จัดหน้า", desc: "รวมหลายไฟล์ เรียงลำดับ หมุน ลบ หรือทำสำเนาหน้า", icon: "▦" },
   { tool: "split", title: "แยก PDF", desc: "แยกทุกหน้า หรือแยกตามช่วงหน้าที่กำหนด", icon: "✂" },
   { tool: "compress", title: "บีบอัด PDF", desc: "ลดขนาดไฟล์โดยย่อรูปภาพข้างใน ข้อความยังคมชัด", icon: "⇲" },
-  { tool: "organize", title: "จัดหน้า", desc: "เรียงลำดับ หมุน ลบ หรือทำสำเนาหน้า", icon: "▦" },
   { tool: "images", title: "รูปภาพ → PDF", desc: "รวมรูป JPG/PNG หลายรูปเป็น PDF ไฟล์เดียว", icon: "🖼" },
   { tool: "toImages", title: "PDF → รูปภาพ", desc: "แปลงหน้า PDF เป็นไฟล์ PNG หรือ JPG", icon: "⇄" },
   { tool: "stamp", title: "เลขหน้า / ลายน้ำ", desc: "ใส่เลขหน้า และลายน้ำข้อความ เช่น “ลับ” “สำเนา”", icon: "#" },
@@ -134,123 +128,6 @@ export function usePickOnePdf(onError: (msg: string) => void, onPicked?: () => v
     }
   };
   return { file, dragOver, chooseViaDialog };
-}
-
-interface Item {
-  key: number;
-  path: string;
-  pages: number | null | undefined; // undefined = still counting, null = unreadable
-}
-let nextKey = 1;
-
-export function MergePdf({ onBack, onError, onDone }: ToolProps) {
-  const [items, setItems] = useState<Item[]>([]);
-  const [busy, setBusy] = useState(false);
-
-  const addPaths = useCallback(
-    (paths: string[]) => {
-      const pdfs = paths.filter((p) => /\.pdf$/i.test(p));
-      if (pdfs.length < paths.length) onError("ข้ามไฟล์ที่ไม่ใช่ PDF");
-      const added = pdfs.map((path) => ({ key: nextKey++, path, pages: undefined }));
-      setItems((cur) => [...cur, ...added]);
-      for (const it of added) {
-        void countPages(it.path).then((pages) =>
-          setItems((cur) => cur.map((x) => (x.key === it.key ? { ...x, pages } : x))),
-        );
-      }
-    },
-    [onError],
-  );
-
-  const addViaDialog = async () => {
-    try {
-      addPaths(await pickPdfPaths());
-    } catch (e) {
-      onError(errText(e));
-    }
-  };
-
-  const dragOver = useFileDrop(addPaths);
-  const { dragKey, handle } = useReorder(setItems, busy);
-
-  const doExport = async () => {
-    setBusy(true);
-    try {
-      const bytes = await mergePdfs(items.map((it) => it.path));
-      const dest = await exportPdf(bytes, "รวมไฟล์.pdf");
-      if (dest) onDone({ open: dest });
-    } catch (e) {
-      onError(`รวมไฟล์ไม่สำเร็จ: ${errText(e)}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const totalPages = items.reduce((n, it) => n + (it.pages ?? 0), 0);
-
-  return (
-    <PageShell
-      title="รวม PDF"
-      subtitle={items.length ? `${items.length} ไฟล์ · ${totalPages.toLocaleString()} หน้า` : "เพิ่มไฟล์ที่ต้องการรวม เรียงลำดับ แล้วกดส่งออก"}
-      onBack={onBack}
-      actions={
-        <>
-          <button onClick={addViaDialog} disabled={busy} className={actionSecondary}>
-            <IconUpload className="h-4 w-4" />
-            เพิ่มไฟล์
-          </button>
-          <button onClick={doExport} disabled={busy || items.length < 2} className={actionPrimary} title={items.length < 2 ? "เพิ่มอย่างน้อย 2 ไฟล์" : undefined}>
-            {busy ? "กำลังรวม…" : "ส่งออก PDF"}
-          </button>
-        </>
-      }
-    >
-      <div className="mx-auto max-w-3xl p-6 lg:p-10">
-        {items.length === 0 ? (
-          <DropZone onClick={addViaDialog} dragOver={dragOver} label="คลิกเพื่อเลือกไฟล์ PDF หรือลากไฟล์มาวางที่นี่" />
-        ) : (
-          <Panel dragOver={dragOver} className="overflow-hidden">
-            <ol className="divide-y divide-maroon/10 dark:divide-white/10">
-              {items.map((it, i) => (
-                <li
-                  key={it.key}
-                  data-key={it.key}
-                  className={`flex items-center gap-3 px-4 py-3 transition-colors ${dragKey === it.key ? "bg-maroon/10 dark:bg-coral/15" : ""}`}
-                >
-                  <span {...handle(it.key)} className={`${handle(it.key).className} shrink-0 px-1 text-neutral-400`}>
-                    ⠿
-                  </span>
-                  <span className="w-6 shrink-0 text-right text-sm text-neutral-400">{i + 1}</span>
-                  <IconFile className="h-5 w-5 shrink-0 text-maroon dark:text-coral" />
-                  <span className="min-w-0 flex-1 truncate text-sm" title={it.path}>
-                    {fileName(it.path)}
-                  </span>
-                  <span className="shrink-0 text-xs text-neutral-500">
-                    {it.pages === undefined ? "…" : it.pages === null ? "อ่านไม่ได้" : `${it.pages} หน้า`}
-                  </span>
-                  <button onClick={() => setItems((c) => moveItem(c, i, -1))} disabled={busy || i === 0} aria-label="เลื่อนขึ้น" title="เลื่อนขึ้น" className={iconBtn}>
-                    ↑
-                  </button>
-                  <button onClick={() => setItems((c) => moveItem(c, i, 1))} disabled={busy || i === items.length - 1} aria-label="เลื่อนลง" title="เลื่อนลง" className={iconBtn}>
-                    ↓
-                  </button>
-                  <button
-                    onClick={() => setItems((cur) => cur.filter((x) => x.key !== it.key))}
-                    disabled={busy}
-                    aria-label="นำออก"
-                    title="นำออก"
-                    className={`${iconBtn} hover:text-brand-700`}
-                  >
-                    <IconTrash className="h-4 w-4" />
-                  </button>
-                </li>
-              ))}
-            </ol>
-          </Panel>
-        )}
-      </div>
-    </PageShell>
-  );
 }
 
 export function SplitPdf({ onBack, onError, onDone }: ToolProps) {

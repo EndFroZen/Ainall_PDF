@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import * as pdfjs from "pdfjs-dist";
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { fileSource } from "../lib/pdf";
 import { IconFile } from "./icons";
 

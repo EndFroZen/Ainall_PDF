@@ -1,7 +1,7 @@
 // PDF operations behind the tool pages: images ⇄ PDF, organize pages, page numbers / watermark.
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import * as pdfjs from "pdfjs-dist";
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { fileName, fileSource, joinPath, loadForEdit, newEditDoc, writeUnique } from "./pdf";
 import { canvasRecompress } from "./compress";
 import { textPicture } from "./annotations";
@@ -157,12 +157,17 @@ export function renderThumbs(path: string, width: number, onThumb: (index: numbe
   };
 }
 
-/** Builds a new PDF from `pages` of the source: any order, repeats allowed, extra rotation in degrees. */
-export async function organizePdf(path: string, pages: { index: number; rotate: number }[]): Promise<Uint8Array> {
+/** Builds a new PDF from pages of any files: any order, repeats allowed, extra rotation in degrees. */
+export async function buildPdf(pages: { path: string; index: number; rotate: number }[]): Promise<Uint8Array> {
   const { degrees } = await import("pdf-lib");
-  const src = await loadForEdit(path);
   const out = await newEditDoc();
-  const copied = await out.copyPages(src, pages.map((p) => p.index));
+  // One copyPages call per file, so fonts and images its pages share are copied once.
+  const copied = new Array<Awaited<ReturnType<typeof out.copyPages>>[number]>(pages.length);
+  for (const path of new Set(pages.map((p) => p.path))) {
+    const at = pages.flatMap((p, i) => (p.path === path ? [i] : []));
+    const got = await out.copyPages(await loadForEdit(path), at.map((i) => pages[i].index));
+    at.forEach((i, j) => (copied[i] = got[j]));
+  }
   copied.forEach((page, i) => {
     out.addPage(page);
     page.setRotation(degrees((((page.getRotation().angle + pages[i].rotate) % 360) + 360) % 360));

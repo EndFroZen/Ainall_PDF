@@ -1,7 +1,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import * as pdfjs from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
+import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { addRecentFile } from "./db";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -129,16 +129,6 @@ export async function newEditDoc() {
   out.setCreator("Ainall PDF");
   out.setProducer("Ainall PDF");
   return out;
-}
-
-/** Joins the PDFs in order into one document. */
-export async function mergePdfs(paths: string[]): Promise<Uint8Array> {
-  const out = await newEditDoc();
-  for (const path of paths) {
-    const src = await loadForEdit(path);
-    for (const page of await out.copyPages(src, src.getPageIndices())) out.addPage(page);
-  }
-  return out.save();
 }
 
 /**
