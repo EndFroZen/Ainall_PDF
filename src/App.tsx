@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import Landing from "./pages/Landing";
 import Viewer from "./pages/Viewer";
 import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
+import Tools, { CompressPdf, MergePdf, SplitPdf, type Tool, type ToolProps } from "./pages/Tools";
+import OrganizePages from "./pages/OrganizePages";
+import ImagesToPdf from "./pages/ImagesToPdf";
+import PdfToImages from "./pages/PdfToImages";
+import StampPdf from "./pages/StampPdf";
 import { showMainWindow } from "./lib/window";
 import {
   closePdf,
@@ -10,6 +17,7 @@ import {
   describePdfError,
   fileName,
   loadPdf,
+  openBytes,
   pickPdfPath,
   savePdf,
   savePdfAs,
@@ -17,7 +25,22 @@ import {
 } from "./lib/pdf";
 import { Modal, btnGhost, btnPrimary } from "./components/Dialogs";
 
-type View = { name: "landing" } | { name: "projects" } | { name: "project"; id: number };
+type View =
+  | { name: "landing" }
+  | { name: "projects" }
+  | { name: "project"; id: number }
+  | { name: "tools" }
+  | { name: "tool"; tool: Tool };
+
+const TOOL_PAGES: Record<Tool, (p: ToolProps) => React.JSX.Element> = {
+  merge: MergePdf,
+  split: SplitPdf,
+  compress: CompressPdf,
+  organize: OrganizePages,
+  images: ImagesToPdf,
+  toImages: PdfToImages,
+  stamp: StampPdf,
+};
 
 interface Loading {
   name: string;
@@ -53,14 +76,22 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
+  // The viewer puts its "flatten annotations into the PDF" function here.
+  const bakeRef = useRef<(() => Promise<Uint8Array | null>) | null>(null);
+
   const doSave = useCallback(async (asNew: boolean): Promise<boolean> => {
-    const cur = pdfRef.current;
+    let cur = pdfRef.current;
     if (!cur) return true;
     setSaving(true);
     try {
-      const next = asNew ? await savePdfAs(cur) : await savePdf(cur);
+      const baked = await bakeRef.current?.();
+      if (baked) cur = { ...cur, bytes: baked, dirty: true };
+      let next = asNew ? await savePdfAs(cur) : await savePdf(cur);
       if (!next) return false; // cancelled the Save dialog
+      // Show the saved content (annotations now part of the page) instead of the old document.
+      if (baked) next = { ...next, doc: await openBytes(baked) };
       if (pdfRef.current?.id === cur.id) replacePdf(next);
+      else if (baked) closePdf(next);
       setToast(`บันทึกแล้ว: ${next.name}`);
       return true;
     } catch (e) {
@@ -70,6 +101,29 @@ export default function App() {
       setSaving(false);
     }
   }, [replacePdf]);
+
+  const markDirty = useCallback(() => {
+    const cur = pdfRef.current;
+    if (cur && !cur.dirty) replacePdf({ ...cur, dirty: true });
+  }, [replacePdf]);
+
+  /** Replaces the open document's content with edited bytes. */
+  const applyEdit = useCallback(
+    async (make: () => Promise<Uint8Array>) => {
+      const cur = pdfRef.current;
+      if (!cur) return;
+      try {
+        const bytes = await make();
+        const doc = await openBytes(bytes);
+        const now = pdfRef.current;
+        if (now?.id !== cur.id) return void doc.loadingTask.destroy();
+        replacePdf({ ...now, bytes, doc, dirty: true });
+      } catch (e) {
+        setError(`แก้ไขไม่สำเร็จ: ${describePdfError(e)}`);
+      }
+    },
+    [replacePdf],
+  );
 
   /** Runs `action` only after unsaved changes are saved or explicitly discarded. */
   const guard = useCallback(
@@ -143,6 +197,15 @@ export default function App() {
 
   const closeDocument = useCallback(() => guard(() => replacePdf(null)), [guard, replacePdf]);
 
+  // "Open with" from Explorer: the file the app was launched with, and files sent by later
+  // launches while it's running (single-instance plugin → "open-file" event).
+  useEffect(() => {
+    const openExternal = (path: string) => void guard(() => openPath(path));
+    void invoke<string | null>("launch_file").then((p) => p && openExternal(p)).catch(() => {});
+    const unlisten = listen<string>("open-file", (e) => openExternal(e.payload));
+    return () => void unlisten.then((fn) => fn());
+  }, [guard, openPath]);
+
   // Ctrl+O anywhere, Esc cancels loading
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -172,7 +235,12 @@ export default function App() {
   const showError = useCallback((msg: string) => setError(msg), []);
   const toLanding = useCallback(() => setView({ name: "landing" }), []);
   const toProjects = useCallback(() => setView({ name: "projects" }), []);
-  const openProjectFile = useCallback((path: string) => openPath(path, { recordRecent: false }), [openPath]);
+  const toTools = useCallback(() => setView({ name: "tools" }), []);
+  const toolDone = useCallback<ToolProps["onDone"]>(
+    (r) => ("open" in r ? void openPath(r.open) : setToast(r.notice)),
+    [openPath],
+  );
+  const openProjectFile =useCallback((path: string) => openPath(path, { recordRecent: false }), [openPath]);
 
   return (
     <>
@@ -185,6 +253,9 @@ export default function App() {
           onSave={() => void doSave(false)}
           onSaveAs={() => void doSave(true)}
           saving={saving}
+          onDirty={markDirty}
+          onEdit={applyEdit}
+          bakeRef={bakeRef}
         />
       ) : view.name === "projects" ? (
         <Projects
@@ -192,6 +263,13 @@ export default function App() {
           onOpenProject={(id) => setView({ name: "project", id })}
           onError={showError}
         />
+      ) : view.name === "tools" ? (
+        <Tools onBack={toLanding} onOpen={(tool) => setView({ name: "tool", tool })} onBlank={newDocument} />
+      ) : view.name === "tool" ? (
+        (() => {
+          const Page = TOOL_PAGES[view.tool];
+          return <Page onBack={toTools} onError={showError} onDone={toolDone} />;
+        })()
       ) : view.name === "project" ? (
         <ProjectDetail
           key={view.id}
@@ -204,7 +282,7 @@ export default function App() {
         <Landing
           onOpenFile={openFile}
           onOpenPath={openPath}
-          onNewDocument={newDocument}
+          onNewDocument={() => setView({ name: "tools" })}
           onOpenProjects={toProjects}
           busy={!!loading}
         />

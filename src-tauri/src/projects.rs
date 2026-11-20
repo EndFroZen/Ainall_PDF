@@ -51,11 +51,16 @@ fn strip_pdf_ext(name: &str) -> &str {
 }
 
 /// `dir/stem.pdf`, or `dir/stem (2).pdf`, `(3)`… if taken.
-fn unique_pdf_path(dir: &Path, stem: &str) -> PathBuf {
-    let mut candidate = dir.join(format!("{stem}.pdf"));
+pub(crate) fn unique_pdf_path(dir: &Path, stem: &str) -> PathBuf {
+    unique_path(dir, stem, "pdf")
+}
+
+/// `dir/stem.ext`, or `dir/stem (2).ext`, `(3)`… if taken.
+pub(crate) fn unique_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
+    let mut candidate = dir.join(format!("{stem}.{ext}"));
     let mut n = 2;
     while candidate.exists() {
-        candidate = dir.join(format!("{stem} ({n}).pdf"));
+        candidate = dir.join(format!("{stem} ({n}).{ext}"));
         n += 1;
     }
     candidate

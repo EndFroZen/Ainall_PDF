@@ -57,9 +57,41 @@ fn migrations() -> Vec<Migration> {
 // (tauri.conf.json → app.security.assetProtocol), which supports range
 // requests, so large files never pass through IPC in one piece.
 
+/// The PDF passed on the command line ("Open with" / double-click in Explorer), made absolute.
+fn pdf_arg(args: &[String], cwd: &std::path::Path) -> Option<String> {
+    args.iter()
+        .skip(1)
+        .find(|a| a.to_ascii_lowercase().ends_with(".pdf"))
+        .map(|a| cwd.join(a).to_string_lossy().into_owned())
+}
+
+/// The PDF this process was launched with; returned once, so a reload doesn't reopen it.
+#[tauri::command]
+fn launch_file() -> Option<String> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static TAKEN: AtomicBool = AtomicBool::new(false);
+    if TAKEN.swap(true, Ordering::SeqCst) {
+        return None;
+    }
+    let cwd = std::env::current_dir().unwrap_or_default();
+    pdf_arg(&std::env::args().collect::<Vec<_>>(), &cwd)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    use tauri::{Emitter, Manager};
     tauri::Builder::default()
+        // Must be first: a second launch ("Open with" while running) hands its file to this window and exits.
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+            if let Some(path) = pdf_arg(&args, std::path::Path::new(&cwd)) {
+                let _ = app.emit("open-file", path);
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(
@@ -68,6 +100,7 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
+            launch_file,
             files::write_pdf,
             files::copy_pdf,
             projects::project_create_dir,

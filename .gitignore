@@ -25,3 +25,6 @@ dist-ssr
 
 # pdf.js runtime data, copied from node_modules by scripts/copy-pdfjs-assets.mjs
 public/pdfjs/
+
+# Built installers (copied out of src-tauri/target before cargo clean)
+installer/
