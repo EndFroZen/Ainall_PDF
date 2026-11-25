@@ -48,15 +48,26 @@ export interface OpenedPdf {
 
 const A4: [number, number] = [595.28, 841.89]; // points
 
-/** Creates an empty one-page A4 document (not saved anywhere yet). */
-export async function createBlankPdf(): Promise<OpenedPdf> {
+export const PAGE_SIZES = {
+  A4,
+  A5: [419.53, 595.28],
+  Letter: [612, 792],
+} satisfies Record<string, [number, number]>;
+export type PageSize = keyof typeof PAGE_SIZES;
+
+/** Creates an empty one-page document (not saved anywhere yet). */
+export async function createBlankPdf(size: PageSize = "A4"): Promise<OpenedPdf> {
   const { PDFDocument } = await import("pdf-lib");
   const out = await PDFDocument.create();
   out.setCreator("Ainall PDF");
   out.setProducer("Ainall PDF");
-  out.addPage(A4);
-  const bytes = await out.save();
-  return { id: nextId++, path: null, name: "เอกสารใหม่.pdf", doc: await openBytes(bytes), bytes, dirty: true };
+  out.addPage(PAGE_SIZES[size]);
+  return unsavedPdf(await out.save(), "เอกสารใหม่.pdf");
+}
+
+/** Wraps freshly made bytes as an open, not-yet-saved document. */
+export async function unsavedPdf(bytes: Uint8Array, name: string): Promise<OpenedPdf> {
+  return { id: nextId++, path: null, name, doc: await openBytes(bytes), bytes, dirty: true };
 }
 
 /** Opens in-memory PDF bytes with pdf.js. */

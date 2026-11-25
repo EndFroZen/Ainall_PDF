@@ -54,3 +54,27 @@ export const IconUpload = ({ className = "h-5 w-5" }: P) => (
     <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
   </svg>
 );
+export const IconCheckAll = ({ className = "h-5 w-5" }: P) => (
+  <svg {...base} className={className}>
+    <rect x="3" y="3" width="18" height="18" rx="3" />
+    <path d="M8 12l3 3 5-6" />
+  </svg>
+);
+export const IconSquare = ({ className = "h-5 w-5" }: P) => (
+  <svg {...base} className={className}>
+    <rect x="3" y="3" width="18" height="18" rx="3" />
+  </svg>
+);
+export const IconMinusSquare = ({ className = "h-5 w-5" }: P) => (
+  <svg {...base} className={className}>
+    <rect x="3" y="3" width="18" height="18" rx="3" />
+    <path d="M8 12h8" />
+  </svg>
+);
+export const IconScissors = ({ className = "h-5 w-5" }: P) => (
+  <svg {...base} className={className}>
+    <circle cx="6" cy="6" r="3" />
+    <circle cx="6" cy="18" r="3" />
+    <path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12" />
+  </svg>
+);

@@ -79,12 +79,13 @@ export async function imagesToPdf(
 }
 
 /** Renders one page onto a white canvas `scale` px per pt. */
-async function renderPage(doc: pdfjs.PDFDocumentProxy, n: number, scale: number) {
+async function renderPage(doc: pdfjs.PDFDocumentProxy, n: number, scale: number, extraRotate = 0) {
   const page = await doc.getPage(n);
-  const base = page.getViewport({ scale: 1 });
+  const rotation = (((page.rotate + extraRotate) % 360) + 360) % 360;
+  const base = page.getViewport({ scale: 1, rotation });
   // ponytail: cap at 10000px per side to stay under the browser's canvas limit
   const s = Math.min(scale, 10000 / Math.max(base.width, base.height));
-  const viewport = page.getViewport({ scale: s });
+  const viewport = page.getViewport({ scale: s, rotation });
   const canvas = document.createElement("canvas");
   canvas.width = Math.floor(viewport.width);
   canvas.height = Math.floor(viewport.height);
@@ -128,6 +129,49 @@ export async function pdfToImages(
 }
 
 /**
+ * Renders pages (0-based `index` in `path`) as image URLs `width` px wide, in the given order.
+ * Each file is opened once and a page used twice is rendered once. Call `cancel` to stop.
+ */
+export function renderPageImages(
+  items: { path: string; index: number; rotate: number }[],
+  width: number,
+  onProgress: (done: number, total: number) => void,
+) {
+  let cancelled = false;
+  let task: ReturnType<typeof pdfjs.getDocument> | null = null;
+  const promise = (async () => {
+    const urls = new Map<string, string>();
+    const id = (it: { path: string; index: number; rotate: number }) => `${it.index}@${it.rotate % 360}#${it.path}`;
+    const total = new Set(items.map(id)).size;
+    for (const path of new Set(items.map((it) => it.path))) {
+      task = pdfjs.getDocument(fileSource(path));
+      try {
+        const doc = await task.promise;
+        for (const it of items) {
+          if (cancelled) throw new Error("cancelled");
+          if (it.path !== path || urls.has(id(it))) continue;
+          const page = await doc.getPage(it.index + 1);
+          const vp = page.getViewport({ scale: 1, rotation: (((page.rotate + it.rotate) % 360) + 360) % 360 });
+          const canvas = await renderPage(doc, it.index + 1, width / vp.width, it.rotate);
+          urls.set(id(it), canvas.toDataURL("image/jpeg", 0.85));
+          onProgress(urls.size, total);
+        }
+      } finally {
+        void task.destroy();
+      }
+    }
+    return items.map((it) => urls.get(id(it))!);
+  })();
+  return {
+    promise,
+    cancel: () => {
+      cancelled = true;
+      void task?.destroy();
+    },
+  };
+}
+
+/**
  * Renders a small preview of every page, calling `onThumb` as each one is ready.
  * Returns the page count; call the returned `cancel` to stop.
  */
@@ -140,7 +184,7 @@ export function renderThumbs(path: string, width: number, onThumb: (index: numbe
         try {
           const vp = (await doc.getPage(n)).getViewport({ scale: 1 });
           const c = await renderPage(doc, n, width / vp.width);
-          if (!cancelled) onThumb(n - 1, c.toDataURL("image/jpeg", 0.8));
+          if (!cancelled) onThumb(n - 1, c.toDataURL("image/jpeg", 0.92));
         } catch {
           // ponytail: a page that fails to render just keeps its placeholder
         }
@@ -180,7 +224,24 @@ export interface StampOptions {
   watermark?: { text: string; color: string; opacity: number; diagonal: boolean };
 }
 
-const FONT = `"Leelawadee UI", Tahoma, sans-serif`;
+export const FONT = `"Leelawadee UI", Tahoma, sans-serif`;
+
+/** Displayed size (pt, rotation applied) of every page. */
+// ponytail: walks every page up front; fine for normal docs, lazy-load if 1000+ pages feel slow.
+export async function pageSizes(path: string): Promise<{ width: number; height: number }[]> {
+  const task = pdfjs.getDocument(fileSource(path));
+  try {
+    const doc = await task.promise;
+    const out = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const { width, height } = (await doc.getPage(i)).getViewport({ scale: 1 });
+      out.push({ width, height });
+    }
+    return out;
+  } finally {
+    void task.destroy();
+  }
+}
 
 /**
  * Adds page numbers and/or a text watermark to every page. Text is drawn as an image

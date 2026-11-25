@@ -68,9 +68,9 @@ export default function ImagesToPdf({ onBack, onError, onDone }: ToolProps) {
         </>
       }
     >
-      <div className="mx-auto max-w-4xl space-y-8 p-6 lg:p-10">
+      <div className={`space-y-8 p-6 lg:p-10 ${items.length ? "mx-auto max-w-4xl" : "flex min-h-full flex-col"}`}>
         {items.length === 0 ? (
-          <DropZone onClick={addViaDialog} dragOver={dragOver} label="คลิกเพื่อเลือกรูป หรือลากรูปมาวางที่นี่ (JPG, PNG)" />
+          <DropZone className="flex-1" onClick={addViaDialog} dragOver={dragOver} label="คลิกเพื่อเลือกรูป หรือลากรูปมาวางที่นี่ (JPG, PNG)" />
         ) : (
           <Panel dragOver={dragOver} className="p-4">
             <ol className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">

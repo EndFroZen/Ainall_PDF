@@ -88,7 +88,7 @@ export default function PrintDialog({
         aria-modal="true"
         aria-labelledby="print-title"
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl bg-cream text-neutral-900 shadow-2xl animate-rise dark:bg-ink-900 dark:text-neutral-100 dark:ring-1 dark:ring-white/10"
+        className="w-full max-w-md rounded-2xl bg-white text-neutral-900 shadow-2xl animate-rise dark:bg-ink-900 dark:text-neutral-100 dark:ring-1 dark:ring-white/10"
       >
         <div className="border-b border-maroon/10 px-6 py-4 dark:border-white/10">
           <h2 id="print-title" className="text-lg font-semibold text-maroon dark:text-coral">

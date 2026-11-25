@@ -25,13 +25,13 @@ function slot<T>(job: () => Promise<T>): Promise<T> {
   });
 }
 
-async function renderThumb(path: string): Promise<string> {
+async function renderThumb(path: string, pageNo: number, width: number): Promise<string> {
   const task = pdfjs.getDocument(fileSource(path));
   try {
     const doc = await task.promise;
-    const page = await doc.getPage(1);
+    const page = await doc.getPage(pageNo);
     const base = page.getViewport({ scale: 1 });
-    const viewport = page.getViewport({ scale: THUMB_WIDTH / base.width });
+    const viewport = page.getViewport({ scale: width / base.width });
     const canvas = document.createElement("canvas");
     canvas.width = Math.floor(viewport.width);
     canvas.height = Math.floor(viewport.height);
@@ -45,23 +45,37 @@ async function renderThumb(path: string): Promise<string> {
   }
 }
 
-/** First-page preview of a PDF; renders when scrolled into view. */
-export default function PdfThumb({ path, className = "" }: { path: string; className?: string }) {
+/** Preview of one PDF page (default: the first); renders when scrolled into view. · `contain` shows the whole page (landscape stays landscape) instead of cropping it to the box. */
+export default function PdfThumb({
+  path,
+  page = 1,
+  className = "",
+  contain = false,
+  width = THUMB_WIDTH,
+}: {
+  path: string;
+  page?: number;
+  className?: string;
+  contain?: boolean;
+  width?: number;
+}) {
+  const key = (page === 1 ? path : `${path}#${page}`) + (width === THUMB_WIDTH ? "" : `@${width}`);
   const ref = useRef<HTMLDivElement>(null);
-  const [src, setSrc] = useState(() => cache.get(path) ?? null);
+  const [src, setSrc] = useState(() => cache.get(key) ?? null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (cache.has(path)) return setSrc(cache.get(path)!);
+    if (cache.has(key)) return setSrc(cache.get(key)!);
     setSrc(null);
     setFailed(false);
     let cancelled = false;
     const io = new IntersectionObserver(([e]) => {
       if (!e.isIntersecting) return;
       io.disconnect();
-      slot(() => (cancelled ? Promise.reject() : renderThumb(path)))
+      // ponytail: reopens the PDF for every page; share one pdf.js doc if long files feel slow.
+      slot(() => (cancelled ? Promise.reject() : renderThumb(path, page, width)))
         .then((url) => {
-          cache.set(path, url);
+          cache.set(key, url);
           if (!cancelled) setSrc(url);
         })
         .catch(() => !cancelled && setFailed(true));
@@ -71,15 +85,19 @@ export default function PdfThumb({ path, className = "" }: { path: string; class
       cancelled = true;
       io.disconnect();
     };
-  }, [path]);
+  }, [path, page, width, key]);
 
   return (
-    <div ref={ref} className={`relative overflow-hidden bg-white ${className}`}>
+    <div ref={ref} className={`relative overflow-hidden ${contain ? "" : "bg-white"} ${className}`}>
       {src ? (
-        <img src={src} alt="" draggable={false} className="h-full w-full object-cover object-top" />
+        <img src={src} alt="" draggable={false} className={`h-full w-full animate-fade ${contain ? "object-contain" : "object-cover object-top"}`} />
       ) : (
-        <div className="flex h-full w-full items-center justify-center text-neutral-300">
-          <IconFile className={`h-8 w-8 ${failed ? "" : "animate-pulse"}`} />
+        <div role="status" aria-label={failed ? "โหลดไม่สำเร็จ" : "กำลังโหลด"} className="flex h-full w-full items-center justify-center text-neutral-400">
+          {failed || !contain ? (
+            <IconFile className={`h-8 w-8 ${failed ? "" : "animate-pulse"}`} />
+          ) : (
+            <span className="h-8 w-8 animate-spin rounded-full border-[3px] border-current/25 border-t-current" />
+          )}
         </div>
       )}
     </div>

@@ -21,11 +21,11 @@ export function place(vp: Viewport, cx: number, cy: number, w: number, h: number
   return { x, y, width: w, height: h, rotate: (vp.rotation + angle) % 360 };
 }
 
-export type Corner = "bottom-center" | "bottom-right" | "top-right" | "top-center";
+export type Corner = `${"top" | "bottom"}-${"left" | "center" | "right"}`;
 
 /** Centre of a w×h label at `corner` of the page as displayed, `margin` pt from the edges. */
 export function cornerCenter(vp: Viewport, corner: Corner, w: number, h: number, margin = 24): [number, number] {
-  const x = corner.endsWith("center") ? vp.width / 2 : vp.width - margin - w / 2;
+  const x = corner.endsWith("center") ? vp.width / 2 : corner.endsWith("left") ? margin + w / 2 : vp.width - margin - w / 2;
   const y = corner.startsWith("top") ? margin + h / 2 : vp.height - margin - h / 2;
   return [x, y];
 }

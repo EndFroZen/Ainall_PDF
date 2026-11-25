@@ -230,7 +230,7 @@ export default function ProjectDetail({
       {/* Drag & drop overlay */}
       {dragOver && (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-maroon/15 p-8 backdrop-blur-[2px] dark:bg-black/50">
-          <div className="flex h-full w-full flex-col items-center justify-center rounded-3xl border-4 border-dashed border-maroon/60 bg-cream/80 dark:border-coral/60 dark:bg-ink-900/80">
+          <div className="flex h-full w-full flex-col items-center justify-center rounded-3xl border-4 border-dashed border-maroon/60 bg-white/80 dark:border-coral/60 dark:bg-ink-900/80">
             <IconUpload className="h-12 w-12 text-maroon dark:text-coral" />
             <p className="mt-4 text-lg font-semibold">วางไฟล์ PDF เพื่อเพิ่มเข้าโปรเจกต์</p>
           </div>

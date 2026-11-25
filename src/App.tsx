@@ -21,8 +21,11 @@ import {
   pickPdfPath,
   savePdf,
   savePdfAs,
+  unsavedPdf,
   type OpenedPdf,
+  type PageSize,
 } from "./lib/pdf";
+import { imagesToPdf } from "./lib/tools";
 import { Modal, btnGhost, btnPrimary } from "./components/Dialogs";
 
 type View =
@@ -40,6 +43,18 @@ const TOOL_PAGES: Record<Tool, (p: ToolProps) => React.JSX.Element> = {
   toImages: PdfToImages,
   stamp: StampPdf,
 };
+
+const TOOL_SLUGS: Record<Tool, string> = {
+  split: "split",
+  compress: "compress",
+  organize: "organize",
+  images: "imgtopdf",
+  toImages: "pdftoimg",
+  stamp: "stamp",
+};
+
+// Asked once per page load: the command hands the file out only once, and StrictMode runs effects twice.
+const launchFile = invoke<string | null>("launch_file").catch(() => null);
 
 interface Loading {
   name: string;
@@ -183,10 +198,10 @@ export default function App() {
   );
 
   const newDocument = useCallback(
-    () =>
+    (size: PageSize) =>
       guard(async () => {
         try {
-          replacePdf(await createBlankPdf());
+          replacePdf(await createBlankPdf(size));
         } catch (e) {
           setError(`สร้างเอกสารไม่ได้: ${describePdfError(e)}`);
         }
@@ -194,13 +209,34 @@ export default function App() {
     [guard, replacePdf],
   );
 
+  const openImages = useCallback(
+    (paths: string[]) =>
+      guard(async () => {
+        try {
+          replacePdf(await unsavedPdf(await imagesToPdf(paths, "a4"), "รูปภาพ.pdf"));
+        } catch (e) {
+          setError(`สร้าง PDF ไม่สำเร็จ: ${describePdfError(e)}`);
+        }
+      }),
+    [guard, replacePdf],
+  );
+
+  // Launched with a file: skip the landing page and go straight to loading it.
+  // `launching` keeps Landing from rendering until we know whether there is one.
+  const [launching, setLaunching] = useState(true);
+  useEffect(() => {
+    launchFile
+      .then((p) => (p ? openPath(p) : undefined))
+      .catch(() => {})
+      .finally(() => setLaunching(false));
+  }, [openPath]);
+
   const closeDocument = useCallback(() => guard(() => replacePdf(null)), [guard, replacePdf]);
 
   // "Open with" from Explorer: the file the app was launched with, and files sent by later
   // launches while it's running (single-instance plugin → "open-file" event).
   useEffect(() => {
     const openExternal = (path: string) => void guard(() => openPath(path));
-    void invoke<string | null>("launch_file").then((p) => p && openExternal(p)).catch(() => {});
     const unlisten = listen<string>("open-file", (e) => openExternal(e.payload));
     return () => void unlisten.then((fn) => fn());
   }, [guard, openPath]);
@@ -239,10 +275,36 @@ export default function App() {
     (r) => ("open" in r ? void openPath(r.open) : setToast(r.notice)),
     [openPath],
   );
-  const openProjectFile =useCallback((path: string) => openPath(path, { recordRecent: false }), [openPath]);
+  // Where we are, shown bottom-left like a URL.
+  const path = pdf
+    ? "/home/viewer"
+    : view.name === "projects"
+      ? "/home/projects"
+      : view.name === "project"
+        ? `/home/projects/${view.id}`
+        : view.name === "tools"
+          ? "/home/create"
+          : view.name === "tool"
+            ? `/home/create/${TOOL_SLUGS[view.tool]}`
+            : "/home";
+  const openProjectFile = useCallback((path: string) => openPath(path, { recordRecent: false }), [openPath]);
 
   return (
     <>
+      {/* rtl + bdi: overflow cuts the front ("…create/pdftoimg") while the text stays left-to-right */}
+      <button
+        dir="rtl"
+        title={`${path} (คลิกเพื่อคัดลอก)`}
+        onClick={() =>
+          navigator.clipboard.writeText(path).then(
+            () => setToast(`คัดลอกแล้ว: ${path}`),
+            () => setError("คัดลอกไม่สำเร็จ"),
+          )
+        }
+        className="fixed bottom-2 right-3 z-30 block max-w-[40vw] truncate text-right font-mono text-[11px] text-neutral-400 hover:text-maroon dark:text-neutral-500 dark:hover:text-coral"
+      >
+        <bdi dir="ltr">{path}</bdi>
+      </button>
       {pdf ? (
         <Viewer
           key={pdf.id}
@@ -256,6 +318,8 @@ export default function App() {
           onEdit={applyEdit}
           bakeRef={bakeRef}
         />
+      ) : launching ? (
+        <div className="min-h-screen bg-white dark:bg-ink-900" />
       ) : view.name === "projects" ? (
         <Projects
           onBack={toLanding}
@@ -263,7 +327,15 @@ export default function App() {
           onError={showError}
         />
       ) : view.name === "tools" ? (
-        <Tools onBack={toLanding} onOpen={(tool) => setView({ name: "tool", tool })} onBlank={newDocument} />
+        <Tools
+          onBack={toLanding}
+          onOpen={(tool) => setView({ name: "tool", tool })}
+          onBlank={newDocument}
+          onOpenFile={openFile}
+          onOpenPath={openPath}
+          onOpenImages={openImages}
+          onError={showError}
+        />
       ) : view.name === "tool" ? (
         (() => {
           const Page = TOOL_PAGES[view.tool];
@@ -320,7 +392,7 @@ export default function App() {
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-[2px]">
           <div
             role="status"
-            className="flex w-[min(26rem,calc(100%-2rem))] items-center gap-4 rounded-2xl bg-cream px-5 py-4 text-neutral-900 shadow-2xl dark:bg-ink-900 dark:text-neutral-100 dark:ring-1 dark:ring-white/10 animate-rise"
+            className="flex w-[min(26rem,calc(100%-2rem))] items-center gap-4 rounded-2xl bg-white px-5 py-4 text-neutral-900 shadow-2xl dark:bg-ink-900 dark:text-neutral-100 dark:ring-1 dark:ring-white/10 animate-rise"
           >
             <span className="h-6 w-6 shrink-0 animate-spin rounded-full border-[3px] border-maroon/20 border-t-maroon dark:border-coral/20 dark:border-t-coral" />
             <div className="min-w-0 flex-1">

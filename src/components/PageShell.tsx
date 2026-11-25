@@ -19,8 +19,8 @@ export default function PageShell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex h-full flex-col bg-[#f7f1e8] text-neutral-900 dark:bg-ink-950 dark:text-neutral-100">
-      <header className="flex h-16 shrink-0 items-center gap-3 border-b border-maroon/10 bg-cream/70 px-4 backdrop-blur dark:border-white/10 dark:bg-ink-900/80 lg:px-8">
+    <div className="flex h-full flex-col bg-neutral-50 text-neutral-900 dark:bg-ink-950 dark:text-neutral-100">
+      <header className="flex h-16 shrink-0 items-center gap-3 border-b border-maroon/10 bg-white/70 px-4 backdrop-blur dark:border-white/10 dark:bg-ink-900/80 lg:px-8">
         <button
           onClick={onBack}
           aria-label={backLabel}
